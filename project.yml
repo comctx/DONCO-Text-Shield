@@ -1,0 +1,50 @@
+name: DONCOTextShield
+options:
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: '16.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    IPHONEOS_DEPLOYMENT_TARGET: '16.0'
+    TARGETED_DEVICE_FAMILY: '1'
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ''
+    GENERATE_INFOPLIST_FILE: NO
+
+targets:
+  DONCOTextShield:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes:
+          - Info.plist
+          - App.entitlements
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.donco.textshield
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/App.entitlements
+        SUPPORTS_MACCATALYST: NO
+        ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: NO
+    dependencies:
+      - target: MessageFilter
+        embed: true
+  MessageFilter:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Extension
+        excludes:
+          - Info.plist
+          - Extension.entitlements
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.donco.textshield.MessageFilter
+        INFOPLIST_FILE: Extension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Extension/Extension.entitlements
+        SKIP_INSTALL: YES
+        SUPPORTS_MACCATALYST: NO

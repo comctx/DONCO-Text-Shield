@@ -1,0 +1,22 @@
+# Compile-check workflow only, not a signed TestFlight IPA.
+workflows:
+  text-shield-build-check:
+    name: DONCO Text Shield iOS Compile Check
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    scripts:
+      - name: Install XcodeGen
+        script: |
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Generate Xcode project
+        script: xcodegen generate
+      - name: Compile app and extension without signing
+        script: |
+          xcodebuild -project DONCOTextShield.xcodeproj \
+            -scheme DONCOTextShield \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build
+      - name: Unit tests for text classification
+        script: swift test
