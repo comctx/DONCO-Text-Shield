@@ -20,3 +20,28 @@ workflows:
             CODE_SIGNING_ALLOWED=NO build
       - name: Unit tests for text classification
         script: swift test
+
+  text-shield-testflight:
+    name: DONCO Text Shield Signed TestFlight IPA
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.donco.textshield
+    scripts:
+      - name: Install XcodeGen
+        script: |
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Generate Xcode project
+        script: xcodegen generate
+      - name: Apply Apple signing profiles to app and extension
+        script: xcode-project use-profiles
+      - name: Build signed iPhone IPA
+        script: |
+          xcode-project build-ipa \
+            --project "$CM_BUILD_DIR/DONCOTextShield.xcodeproj" \
+            --scheme DONCOTextShield
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
