@@ -17,11 +17,25 @@ enum MessageClassifier {
         let body = normalized(message)
         guard !body.isEmpty else { return allow() }
 
+        if settings.scams {
+            let scamSignals = containsUnwarnedScam(body, [
+                "claim your prize", "you have won a prize", "unclaimed winnings",
+                "avoid arrest", "pay with gift cards", "send gift card codes",
+                "guaranteed crypto returns", "double your bitcoin",
+                "your package cannot be delivered pay", "unpaid toll fee pay now",
+                "your account will be suspended click", "social security number to verify"
+            ])
+            if scamSignals {
+                return FilterResult(decision: .junk, category: "Possible scam",
+                                    explanation: "Known suspicious solicitation pattern")
+            }
+        }
+
         // Party-neutral by design: no candidate or party receives different treatment.
         let clearCampaignLanguage = containsAny(body, [
             "re-elect", "reelect", "elect our candidate", "elect our senator",
             "elect our governor", "elect our president",
-            "support our candidate", "support the candidate", "your vote matters",
+            "support our candidate", "support the candidate",
             "we need your vote", "join our campaign",
             "campaign rally", "paid for by the campaign", "paid for by friends of",
             "stop the opposition", "vote yes on", "vote no on"
@@ -40,10 +54,14 @@ enum MessageClassifier {
             "double your impact", "triple your impact", "match your gift"
         ])
         let campaignFunding = donationAppeal && politicalContext
-        let politicalCallToAction = politicalContext && containsAny(body, [
+        // Generic voting reminders and opt-out wording do not establish campaign intent.
+        let campaignContext = containsAny(body, [
+            "our campaign", "our candidate", "campaign rally", "political party",
+            "republican", "democrat", "super pac", "committee to elect"
+        ])
+        let politicalCallToAction = campaignContext && containsAny(body, [
             "vote today", "vote tomorrow", "vote early", "cast your vote",
-            "request your ballot", "sign our petition", "join the fight",
-            "text stop to opt out", "text stop to end", "reply stop to end"
+            "request your ballot", "sign our petition", "join the fight", "your vote matters"
         ])
 
         if settings.politicalFundraising && campaignFunding {
@@ -67,20 +85,6 @@ enum MessageClassifier {
                                 explanation: "Likely verification, delivery, or appointment text")
         }
 
-        if settings.scams {
-            let scamSignals = containsAny(body, [
-                "claim your prize", "you have won a prize", "unclaimed winnings",
-                "avoid arrest", "pay with gift cards", "send gift card codes",
-                "guaranteed crypto returns", "double your bitcoin",
-                "your package cannot be delivered pay", "unpaid toll fee pay now",
-                "your account will be suspended click", "social security number to verify"
-            ])
-            if scamSignals {
-                return FilterResult(decision: .junk, category: "Possible scam",
-                                    explanation: "Known suspicious solicitation pattern")
-            }
-        }
-
         if settings.advertising {
             let salesCalls = containsAny(body, [
                 "limited time offer", "flash sale", "exclusive deal", "buy now",
@@ -97,6 +101,25 @@ enum MessageClassifier {
             }
         }
         return allow()
+    }
+
+
+    // A warning suppresses only the immediately following signal. Later requests
+    // in the same message are still checked; warning words never allow a message.
+    private static func containsUnwarnedScam(_ body: String, _ signals: [String]) -> Bool {
+        let nsBody = body as NSString
+        for signal in signals {
+            let pattern = "(?<![a-z0-9])" + NSRegularExpression.escapedPattern(for: signal) + "(?![a-z0-9])"
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            for match in regex.matches(in: body, range: NSRange(location: 0, length: nsBody.length)) {
+                let prefix = nsBody.substring(to: match.range.location)
+                let warningPattern = #"(?:\bdo not|\bdon't|\bdon’t|\bnever)\s+(?:(?:ever|to)\s+)?$"#
+                if prefix.range(of: warningPattern, options: .regularExpression) == nil {
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     private static func allow() -> FilterResult {
