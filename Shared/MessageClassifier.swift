@@ -46,13 +46,18 @@ enum MessageClassifier {
             "text stop to opt out", "text stop to end", "reply stop to end"
         ])
 
-        if settings.politicalFundraising && campaignFunding {
-            return FilterResult(decision: .junk, category: "Political fundraising",
-                                explanation: "Political donation solicitation detected")
-        }
-        if settings.politicalMessages && (campaign || politicalCallToAction) {
-            return FilterResult(decision: .junk, category: "Political campaign",
-                                explanation: "Campaign or voting solicitation detected")
+        if settings.scams {
+            let scamSignals = containsAny(body, [
+                "claim your prize", "you have won a prize", "unclaimed winnings",
+                "avoid arrest", "pay with gift cards", "send gift card codes",
+                "guaranteed crypto returns", "double your bitcoin",
+                "your package cannot be delivered pay", "unpaid toll fee pay now",
+                "your account will be suspended click", "social security number to verify"
+            ])
+            if scamSignals {
+                return FilterResult(decision: .junk, category: "Possible scam",
+                                    explanation: "Known suspicious solicitation pattern")
+            }
         }
 
         if settings.protectImportantMessages && containsAny(body, [
@@ -67,18 +72,13 @@ enum MessageClassifier {
                                 explanation: "Likely verification, delivery, or appointment text")
         }
 
-        if settings.scams {
-            let scamSignals = containsAny(body, [
-                "claim your prize", "you have won a prize", "unclaimed winnings",
-                "avoid arrest", "pay with gift cards", "send gift card codes",
-                "guaranteed crypto returns", "double your bitcoin",
-                "your package cannot be delivered pay", "unpaid toll fee pay now",
-                "your account will be suspended click", "social security number to verify"
-            ])
-            if scamSignals {
-                return FilterResult(decision: .junk, category: "Possible scam",
-                                    explanation: "Known suspicious solicitation pattern")
-            }
+        if settings.politicalFundraising && campaignFunding {
+            return FilterResult(decision: .junk, category: "Political fundraising",
+                                explanation: "Political donation solicitation detected")
+        }
+        if settings.politicalMessages && (campaign || politicalCallToAction) {
+            return FilterResult(decision: .junk, category: "Political campaign",
+                                explanation: "Campaign or voting solicitation detected")
         }
 
         if settings.advertising {
@@ -113,6 +113,10 @@ enum MessageClassifier {
     }
 
     private static func containsAny(_ body: String, _ signals: [String]) -> Bool {
-        signals.contains(where: { body.contains($0) })
+        signals.contains { signal in
+            let escaped = NSRegularExpression.escapedPattern(for: signal.trimmingCharacters(in: .whitespaces))
+            return body.range(of: "(?<![\\p{L}\\p{N}])" + escaped + "(?![\\p{L}\\p{N}])",
+                              options: .regularExpression) != nil
+        }
     }
 }

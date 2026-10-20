@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var settings = SharedFilterSettings.load()
     @State private var sample = "Hi, our campaign needs your vote. Chip in $10 today to win this election."
     @State private var showingTest = false
+    @State private var settingsSaveFailed = false
 
     private var groupReady: Bool { SharedFilterSettings.isAppGroupAvailable }
     private var previewResult: FilterResult { MessageClassifier.classify(sample, settings: settings) }
@@ -21,6 +22,7 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     hero
                     activationCard
+                    safetyCard
                     filterCard
                     privacyCard
                     testCard
@@ -31,6 +33,11 @@ struct ContentView: View {
             .background(ShieldTheme.navy.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingTest) { testSheet }
+            .alert("Settings could not be saved", isPresented: $settingsSaveFailed) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Your change was not applied. Previous settings have been restored. If this continues, disable DONCO Text Shield in iPhone message-filter settings until shared storage is repaired.")
+            }
         }
         .tint(ShieldTheme.teal)
         .preferredColorScheme(.dark)
@@ -83,6 +90,18 @@ struct ContentView: View {
         .cardBackground()
     }
 
+    private var safetyCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Check filtered messages regularly", systemImage: "exclamationmark.triangle")
+                .font(.headline).foregroundStyle(.orange)
+            Text("Filtering can make mistakes: legitimate texts may be sent to Junk or Promotions, and unwanted texts may get through. Protect important texts reduces some mistakes but cannot guarantee delivery or identify a sender as trustworthy.")
+            Text("Do not rely on this app for emergency, medical, banking, or other time-critical communications. Check the Junk and Promotions folders in Messages for missing texts. To stop filtering, turn off DONCO Text Shield in your iPhone text-message filter settings.")
+            Text("Sample results do not confirm that the iPhone filter is enabled or working.")
+        }
+        .font(.subheadline).foregroundStyle(ShieldTheme.muted)
+        .cardBackground()
+    }
+
     private var filterCard: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("FILTER CATEGORIES")
@@ -117,7 +136,10 @@ struct ContentView: View {
         }
         .toggleStyle(SwitchToggleStyle(tint: ShieldTheme.teal))
         .onChange(of: enabled.wrappedValue) { _ in
-            _ = SharedFilterSettings.save(settings)
+            if !SharedFilterSettings.save(settings) {
+                settings = SharedFilterSettings.load()
+                settingsSaveFailed = true
+            }
         }
     }
 

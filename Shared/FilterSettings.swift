@@ -8,6 +8,10 @@ struct FilterSettings: Codable, Equatable, Sendable {
     var protectImportantMessages = true
 
     static let `default` = FilterSettings()
+    // If shared storage is unavailable or corrupt, avoid silently filtering texts.
+    static let disabled = FilterSettings(politicalMessages: false, politicalFundraising: false,
+                                        scams: false, advertising: false,
+                                        protectImportantMessages: true)
 }
 
 enum SharedFilterSettings {
@@ -23,9 +27,10 @@ enum SharedFilterSettings {
     }
 
     static func load() -> FilterSettings {
-        guard let data = UserDefaults(suiteName: appGroup)?.data(forKey: key),
+        guard isAppGroupAvailable,
+              let data = UserDefaults(suiteName: appGroup)?.data(forKey: key),
               let settings = try? JSONDecoder().decode(FilterSettings.self, from: data)
-        else { return .default }
+        else { return .disabled }
         return settings
     }
 

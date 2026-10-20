@@ -2,6 +2,26 @@ import XCTest
 @testable import TextShieldCore
 
 final class MessageClassifierTests: XCTestCase {
+    func testScamSignalsCannotBeBypassedWithImportantKeywords() {
+        for prefix in ["Fraud alert: ", "Your verification code is 123456. "] {
+            XCTAssertEqual(MessageClassifier.classify(prefix + "Pay with gift cards to avoid arrest").decision, .junk)
+        }
+    }
+    func testImportantMessagePrecedesPoliticalRules() {
+        XCTAssertEqual(MessageClassifier.classify("Your campaign account verification code is 123456. Join our campaign.").decision, .allow)
+        var settings = FilterSettings.default
+        settings.protectImportantMessages = false
+        XCTAssertEqual(MessageClassifier.classify("Your campaign account verification code is 123456. Join our campaign.", settings: settings).decision, .junk)
+    }
+    func testKeywordsDoNotMatchInsideUnrelatedWords() {
+        XCTAssertEqual(MessageClassifier.classify("Donate to the residential garden project").decision, .allow)
+        XCTAssertEqual(MessageClassifier.classify("Our election meeting will select chairs").decision, .allow)
+    }
+    func testDisabledFallbackDoesNotFilter() {
+        for text in ["Join our campaign", "Claim your prize now", "Flash sale 30% off"] {
+            XCTAssertEqual(MessageClassifier.classify(text, settings: .disabled).decision, .allow)
+        }
+    }
     func testPoliticalLeftAndRightAreTreatedTheSame() {
         let samples = [
             "Democratic campaign: We need your vote. Vote for our candidate today!",
