@@ -22,6 +22,10 @@ targets:
           - Info.plist
           - App.entitlements
       - path: Shared
+        excludes:
+          - PrivacyInfo.xcprivacy
+      - path: Shared/PrivacyInfo.xcprivacy
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.donco.textshield
@@ -41,6 +45,10 @@ targets:
           - Info.plist
           - Extension.entitlements
       - path: Shared
+        excludes:
+          - PrivacyInfo.xcprivacy
+      - path: Shared/PrivacyInfo.xcprivacy
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.donco.textshield.MessageFilter

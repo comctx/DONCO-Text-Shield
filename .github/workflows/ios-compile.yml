@@ -17,5 +17,10 @@ jobs:
         run: >-
           xcodebuild -project DONCOTextShield.xcodeproj
           -scheme DONCOTextShield -configuration Debug
-          -sdk iphonesimulator -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath build -sdk iphonesimulator -destination 'generic/platform=iOS Simulator'
           CODE_SIGNING_ALLOWED=NO build
+      - name: Verify privacy manifests in app and extension
+        run: |
+          plutil -lint build/Build/Products/Debug-iphonesimulator/DONCOTextShield.app/PrivacyInfo.xcprivacy
+          plutil -lint build/Build/Products/Debug-iphonesimulator/DONCOTextShield.app/PlugIns/MessageFilter.appex/PrivacyInfo.xcprivacy
+          /usr/libexec/PlistBuddy -c 'Print :NSPrivacyAccessedAPITypes:0:NSPrivacyAccessedAPITypeReasons:0' build/Build/Products/Debug-iphonesimulator/DONCOTextShield.app/PrivacyInfo.xcprivacy

@@ -18,6 +18,8 @@ struct ContentView: View {
     }
     @State private var sample = "Hi, our campaign needs your vote. Chip in $10 today to win this election."
     @State private var showingTest = false
+    @State private var showingPrivacy = false
+    @Environment(\.scenePhase) private var scenePhase
 
     private var groupReady: Bool { SharedFilterSettings.isAppGroupAvailable }
     private var previewResult: FilterResult { MessageClassifier.classify(sample, settings: settings) }
@@ -28,6 +30,7 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     hero
                     activationCard
+                    limitationsCard
                     filterCard
                     if let warning = settingsWarning {
                         Label(warning, systemImage: "exclamationmark.triangle")
@@ -43,7 +46,17 @@ struct ContentView: View {
             }
             .background(ShieldTheme.navy.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showingTest) { testSheet }
+            .sheet(isPresented: $showingTest, onDismiss: { sample = "" }) { testSheet }
+            .sheet(isPresented: $showingPrivacy) { PrivacyHelpView() }
+            .onChange(of: scenePhase) { phase in
+                if phase == .active {
+                    let snapshot = SharedFilterSettings.snapshot()
+                    settings = snapshot.settings
+                    settingsWarning = snapshot.warning
+                } else {
+                    sample = ""
+                }
+            }
         }
         .tint(ShieldTheme.teal)
         .preferredColorScheme(.dark)
@@ -88,11 +101,24 @@ struct ContentView: View {
                 .font(.caption)
                 .foregroundStyle(ShieldTheme.muted)
             if !groupReady {
-                Label("Shared settings unavailable. Check App Group signing.", systemImage: "exclamationmark.triangle")
+                Label("Shared settings unavailable. Text Shield will allow messages.", systemImage: "exclamationmark.triangle")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
         }
+        .cardBackground()
+    }
+
+    private var limitationsCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Check your filtered messages", systemImage: "exclamationmark.triangle")
+                .font(.headline)
+            Text("Important texts can be filtered, and scams can get through. Review Junk or Spam, Promotions, and Unknown Senders, especially when expecting a code or appointment.")
+                .font(.subheadline)
+            Button("Privacy, limitations & help") { showingPrivacy = true }
+            Button("Turn all filtering off") { saveChoices(.disabled) }
+        }
+        .foregroundStyle(.white)
         .cardBackground()
     }
 
@@ -136,15 +162,19 @@ struct ContentView: View {
         Binding(get: { settings[keyPath: keyPath] }, set: { value in
             var proposed = settings
             proposed[keyPath: keyPath] = value
-            if SharedFilterSettings.save(proposed) {
-                settings = proposed
-                settingsWarning = nil
-            } else {
-                let snapshot = SharedFilterSettings.snapshot()
-                settings = snapshot.settings
-                settingsWarning = "Your change could not be verified. The switches show the choices currently readable by this app. Try again before relying on filtering."
-            }
+            saveChoices(proposed)
         })
+    }
+
+    private func saveChoices(_ proposed: FilterSettings) {
+        if SharedFilterSettings.save(proposed) {
+            settings = proposed
+            settingsWarning = nil
+        } else {
+            let snapshot = SharedFilterSettings.snapshot()
+            settings = snapshot.settings
+            settingsWarning = "Your change could not be verified. The switches show the choices currently readable by this app. Try again before relying on filtering."
+        }
     }
 
     private var privacyCard: some View {
@@ -209,7 +239,7 @@ struct ContentView: View {
                     Text("Result: \(previewResult.category)")
                         .font(.title3.bold())
                     Text(previewResult.explanation)
-                    Text("Apple destination: \(destination(previewResult.decision))")
+                    Text("Suggested category: \(destination(previewResult.decision))")
                         .foregroundStyle(ShieldTheme.teal)
                 }
                 .font(.subheadline)
@@ -236,7 +266,7 @@ struct ContentView: View {
 
     private func destination(_ decision: FilterDecision) -> String {
         switch decision {
-        case .allow: return "Normal delivery"
+        case .allow: return "Allow (other Messages filters may still apply)"
         case .junk: return "Junk"
         case .promotion: return "Promotions"
         }
