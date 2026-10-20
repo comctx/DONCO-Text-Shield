@@ -8,9 +8,18 @@ private enum ShieldTheme {
 }
 
 struct ContentView: View {
-    @State private var settings = SharedFilterSettings.load()
+    @State private var settings: FilterSettings
+    @State private var settingsWarning: String?
+
+    init() {
+        let snapshot = SharedFilterSettings.snapshot()
+        _settings = State(initialValue: snapshot.settings)
+        _settingsWarning = State(initialValue: snapshot.warning)
+    }
     @State private var sample = "Hi, our campaign needs your vote. Chip in $10 today to win this election."
     @State private var showingTest = false
+    @State private var showingPrivacy = false
+    @Environment(\.scenePhase) private var scenePhase
 
     private var groupReady: Bool { SharedFilterSettings.isAppGroupAvailable }
     private var previewResult: FilterResult { MessageClassifier.classify(sample, settings: settings) }
@@ -21,7 +30,14 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     hero
                     activationCard
+                    limitationsCard
                     filterCard
+                    if let warning = settingsWarning {
+                        Label(warning, systemImage: "exclamationmark.triangle")
+                            .font(.subheadline)
+                            .foregroundStyle(.orange)
+                            .accessibilityLabel(warning)
+                    }
                     privacyCard
                     testCard
                     footer
@@ -30,7 +46,17 @@ struct ContentView: View {
             }
             .background(ShieldTheme.navy.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showingTest) { testSheet }
+            .sheet(isPresented: $showingTest, onDismiss: { sample = "" }) { testSheet }
+            .sheet(isPresented: $showingPrivacy) { PrivacyHelpView() }
+            .onChange(of: scenePhase) { phase in
+                if phase == .active {
+                    let snapshot = SharedFilterSettings.snapshot()
+                    settings = snapshot.settings
+                    settingsWarning = snapshot.warning
+                } else {
+                    sample = ""
+                }
+            }
         }
         .tint(ShieldTheme.teal)
         .preferredColorScheme(.dark)
@@ -75,11 +101,22 @@ struct ContentView: View {
                 .font(.caption)
                 .foregroundStyle(ShieldTheme.muted)
             if !groupReady {
-                Label("Shared settings unavailable. Check App Group signing.", systemImage: "exclamationmark.triangle")
+                Label("Shared settings unavailable. Text Shield will allow messages.", systemImage: "exclamationmark.triangle")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
         }
+        .cardBackground()
+    }
+
+    private var limitationsCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Helps sort unwanted texts. Filtering can make mistakes, so check your filtered folders for important messages.")
+                .font(.subheadline)
+            Button("Privacy & Help") { showingPrivacy = true }
+            Button("Turn all filtering off") { saveChoices(.disabled) }
+        }
+        .foregroundStyle(.white)
         .cardBackground()
     }
 
@@ -89,15 +126,15 @@ struct ContentView: View {
                 .font(.caption.weight(.bold))
                 .tracking(1.5)
                 .foregroundStyle(ShieldTheme.muted)
-            filterToggle("Political campaign texts", detail: "All parties and candidates", icon: "checkmark.seal", enabled: $settings.politicalMessages)
+            filterToggle("Political campaign texts", detail: "All parties and candidates", icon: "checkmark.seal", enabled: settingBinding(\.politicalMessages))
             Divider().overlay(.white.opacity(0.12))
-            filterToggle("Political fundraising", detail: "Campaign donations and PAC appeals", icon: "dollarsign.circle", enabled: $settings.politicalFundraising)
+            filterToggle("Political fundraising", detail: "Campaign donations and PAC appeals", icon: "dollarsign.circle", enabled: settingBinding(\.politicalFundraising))
             Divider().overlay(.white.opacity(0.12))
-            filterToggle("Scams & suspicious offers", detail: "High-confidence fraud patterns", icon: "exclamationmark.shield", enabled: $settings.scams)
+            filterToggle("Scams & suspicious offers", detail: "Known suspicious wording; scams can still get through", icon: "exclamationmark.shield", enabled: settingBinding(\.scams))
             Divider().overlay(.white.opacity(0.12))
-            filterToggle("Advertising", detail: "Move detected marketing to Promotions", icon: "tag", enabled: $settings.advertising)
+            filterToggle("Advertising", detail: "Move detected marketing to Promotions", icon: "tag", enabled: settingBinding(\.advertising))
             Divider().overlay(.white.opacity(0.12))
-            filterToggle("Protect important texts", detail: "Prioritize codes, deliveries, and appointments", icon: "lock", enabled: $settings.protectImportantMessages)
+            filterToggle("Prefer likely important texts", detail: "Codes and reminders can still be filtered; check Junk", icon: "lock", enabled: settingBinding(\.protectImportantMessages))
         }
         .cardBackground()
     }
@@ -116,8 +153,25 @@ struct ContentView: View {
             }
         }
         .toggleStyle(SwitchToggleStyle(tint: ShieldTheme.teal))
-        .onChange(of: enabled.wrappedValue) { _ in
-            _ = SharedFilterSettings.save(settings)
+
+    }
+
+    private func settingBinding(_ keyPath: WritableKeyPath<FilterSettings, Bool>) -> Binding<Bool> {
+        Binding(get: { settings[keyPath: keyPath] }, set: { value in
+            var proposed = settings
+            proposed[keyPath: keyPath] = value
+            saveChoices(proposed)
+        })
+    }
+
+    private func saveChoices(_ proposed: FilterSettings) {
+        if SharedFilterSettings.save(proposed) {
+            settings = proposed
+            settingsWarning = nil
+        } else {
+            let snapshot = SharedFilterSettings.snapshot()
+            settings = snapshot.settings
+            settingsWarning = "Your change could not be verified. The switches show the choices currently readable by this app. Try again before relying on filtering."
         }
     }
 
@@ -183,7 +237,7 @@ struct ContentView: View {
                     Text("Result: \(previewResult.category)")
                         .font(.title3.bold())
                     Text(previewResult.explanation)
-                    Text("Apple destination: \(destination(previewResult.decision))")
+                    Text("Suggested category: \(destination(previewResult.decision))")
                         .foregroundStyle(ShieldTheme.teal)
                 }
                 .font(.subheadline)
@@ -210,7 +264,7 @@ struct ContentView: View {
 
     private func destination(_ decision: FilterDecision) -> String {
         switch decision {
-        case .allow: return "Normal delivery"
+        case .allow: return "Allow (other Messages filters may still apply)"
         case .junk: return "Junk"
         case .promotion: return "Promotions"
         }
