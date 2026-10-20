@@ -111,11 +111,9 @@ struct ContentView: View {
 
     private var limitationsCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("Check your filtered messages", systemImage: "exclamationmark.triangle")
-                .font(.headline)
-            Text("Important texts can be filtered, and scams can get through. Review Junk or Spam, Promotions, and Unknown Senders, especially when expecting a code or appointment.")
+            Text("Helps sort unwanted texts. Filtering can make mistakes, so check your filtered folders for important messages.")
                 .font(.subheadline)
-            Button("Privacy, limitations & help") { showingPrivacy = true }
+            Button("Privacy & Help") { showingPrivacy = true }
             Button("Turn all filtering off") { saveChoices(.disabled) }
         }
         .foregroundStyle(.white)
