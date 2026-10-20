@@ -25,14 +25,22 @@ enum MessageClassifier {
                 "your package cannot be delivered pay", "unpaid toll fee pay now",
                 "your account will be suspended click", "social security number to verify"
             ])
-            if scamSignals {
+            let prizeFee = containsAny(body, ["you won", "you have won", "winnings", "your prize"]) &&
+                containsActionablePattern(body, #"\bpay (?:a |the )?(?:processing |release )?fee\b"#)
+            let tollPayment = containsAny(body, ["toll", "tolls"]) &&
+                containsAny(body, ["overdue", "unpaid", "outstanding"]) &&
+                containsAny(body, ["https://", "http://"]) &&
+                containsActionablePattern(body, #"\b(?:settle (?:your |the )?(?:overdue |outstanding )?balance|pay (?:now|your|the))\b"#)
+            let credentials = containsActionablePattern(body,
+                #"\b(?:reply|send|share)(?: with)? (?:your )?(?:password|pin)\b"#)
+            if scamSignals || prizeFee || tollPayment || credentials {
                 return FilterResult(decision: .junk, category: "Possible scam",
                                     explanation: "Known suspicious solicitation pattern")
             }
         }
 
         // Party-neutral by design: no candidate or party receives different treatment.
-        let clearCampaignLanguage = containsAny(body, [
+        let clearCampaignLanguage = containsUnwarnedScam(body, [
             "re-elect", "reelect", "elect our candidate", "elect our senator",
             "elect our governor", "elect our president",
             "support our candidate", "support the candidate",
@@ -73,7 +81,13 @@ enum MessageClassifier {
                                 explanation: "Campaign or voting solicitation detected")
         }
 
-        if settings.protectImportantMessages && containsAny(body, [
+        let marketing = hasMarketing(body)
+        let serviceNotice = containsAny(body, [
+            "appointment reminder", "your appointment is", "prescription is ready",
+            "out for delivery", "package delivered", "delivery confirmation",
+            "flight confirmation", "boarding pass", "fraud alert"
+        ])
+        if settings.protectImportantMessages && !(settings.advertising && marketing && !serviceNotice) && containsAny(body, [
             "verification code", "security code", "your code is", "one-time code",
             "one time code", "one-time passcode", "two-factor authentication",
             "authentication code", "login code", "sign-in code", "otp is",
@@ -85,7 +99,37 @@ enum MessageClassifier {
                                 explanation: "Likely verification, delivery, or appointment text")
         }
 
-        if settings.advertising {
+        if settings.advertising && marketing {
+            return FilterResult(decision: .promotion, category: "Advertising",
+                                explanation: "Promotional marketing message")
+        }
+        return allow()
+    }
+
+
+    // Suppress only a directly negated or explicitly quoted warning signal.
+    // Every occurrence is checked, so a warning never permits the whole message.
+    private static func containsUnwarnedScam(_ body: String, _ signals: [String]) -> Bool {
+        signals.contains { signal in
+            containsActionablePattern(body, "(?<![a-z0-9])" +
+                NSRegularExpression.escapedPattern(for: signal) + "(?![a-z0-9])")
+        }
+    }
+
+    private static func containsActionablePattern(_ body: String, _ pattern: String) -> Bool {
+        let nsBody = body as NSString
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
+        for match in regex.matches(in: body, range: NSRange(location: 0, length: nsBody.length)) {
+            let prefix = nsBody.substring(to: match.range.location)
+            let warningPattern = #"(?:\bdo not|\bdon't|\bdon’t|\bnever(?: ask (?:you|anyone) to)?|\b(?:ignore|disregard) (?:texts|messages) (?:saying|that say))\s+(?:(?:ever|to)\s+)?["“']?$"#
+            if prefix.range(of: warningPattern, options: .regularExpression) == nil {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func hasMarketing(_ body: String) -> Bool {
             let salesCalls = containsAny(body, [
                 "limited time offer", "flash sale", "exclusive deal", "buy now",
                 "shop now", "promo code", "coupon code", "free shipping",
@@ -95,31 +139,8 @@ enum MessageClassifier {
                 "off your order", "% off", "discount", "offer", "sale", "shop",
                 "buy", "redeem", "purchase", "code", "unsubscribe", "reply stop"
             ])
-            if salesCalls && salesContext {
-                return FilterResult(decision: .promotion, category: "Advertising",
-                                    explanation: "Promotional marketing message")
-            }
-        }
-        return allow()
-    }
 
-
-    // A warning suppresses only the immediately following signal. Later requests
-    // in the same message are still checked; warning words never allow a message.
-    private static func containsUnwarnedScam(_ body: String, _ signals: [String]) -> Bool {
-        let nsBody = body as NSString
-        for signal in signals {
-            let pattern = "(?<![a-z0-9])" + NSRegularExpression.escapedPattern(for: signal) + "(?![a-z0-9])"
-            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
-            for match in regex.matches(in: body, range: NSRange(location: 0, length: nsBody.length)) {
-                let prefix = nsBody.substring(to: match.range.location)
-                let warningPattern = #"(?:\bdo not|\bdon't|\bdon’t|\bnever)\s+(?:(?:ever|to)\s+)?$"#
-                if prefix.range(of: warningPattern, options: .regularExpression) == nil {
-                    return true
-                }
-            }
-        }
-        return false
+        return salesCalls && salesContext
     }
 
     private static func allow() -> FilterResult {

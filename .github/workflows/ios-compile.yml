@@ -1,0 +1,21 @@
+name: iOS unsigned compile check
+on:
+  push:
+    branches: [rules-first-comparison-2026-10]
+  pull_request:
+jobs:
+  ios-compile:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Compile app and message extension without signing
+        run: >-
+          xcodebuild -project DONCOTextShield.xcodeproj
+          -scheme DONCOTextShield -configuration Debug
+          -sdk iphonesimulator -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO build
