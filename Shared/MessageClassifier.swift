@@ -33,7 +33,11 @@ enum MessageClassifier {
                 containsActionablePattern(body, #"\b(?:settle (?:your |the )?(?:overdue |outstanding )?balance|pay (?:now|your|the))\b"#)
             let credentials = containsActionablePattern(body,
                 #"\b(?:reply|send|share)(?: with)? (?:your )?(?:password|pin)\b"#)
-            if scamSignals || prizeFee || tollPayment || credentials {
+            let billingThreat = containsAny(body, ["payment was declined", "payment failed"]) &&
+                containsAny(body, ["lose service", "service will be suspended"]) &&
+                containsAny(body, ["https://", "http://"]) &&
+                containsActionablePattern(body, #"\bupdate your card\b"#)
+            if scamSignals || prizeFee || tollPayment || credentials || billingThreat {
                 return FilterResult(decision: .junk, category: "Possible scam",
                                     explanation: "Known suspicious solicitation pattern")
             }
@@ -121,7 +125,7 @@ enum MessageClassifier {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
         for match in regex.matches(in: body, range: NSRange(location: 0, length: nsBody.length)) {
             let prefix = nsBody.substring(to: match.range.location)
-            let warningPattern = #"(?:\bdo not|\bdon't|\bdon’t|\bnever(?: ask (?:you|anyone) to)?|\b(?:ignore|disregard) (?:texts|messages) (?:saying|that say))\s+(?:(?:ever|to)\s+)?["“']?$"#
+            let warningPattern = #"(?:\bdo not|\bdon't|\bdon’t|\bnever(?: ask (?:you|anyone) to| request that you)?|\b(?:ignore|disregard) (?:texts|messages) (?:saying|that say))\s+(?:(?:ever|to)\s+)?["“']?$"#
             if prefix.range(of: warningPattern, options: .regularExpression) == nil {
                 return true
             }

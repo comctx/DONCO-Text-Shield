@@ -17,6 +17,13 @@ final class ExpandedRegressionTests: XCTestCase {
         }
     }
 
+    func testTwoFailuresFromSecondEvaluationAreFixed() {
+        XCTAssertEqual(MessageClassifier.classify("Security notice: We never request that you send gift card codes.").decision, .allow)
+        XCTAssertEqual(MessageClassifier.classify("Your payment was declined. Update your card at https://billing-example.invalid or lose service.").decision, .junk)
+        XCTAssertEqual(MessageClassifier.classify("We never request that you send gift card codes. Send gift card codes now.").decision, .junk)
+        XCTAssertEqual(MessageClassifier.classify("Payment failed. Never update your card at https://example.invalid or lose service.").decision, .allow)
+    }
+
     func testWarningCannotHideSeparateRequests() {
         for message in [
             "Your bank will never ask you to pay with gift cards. Pay with gift cards now.",
